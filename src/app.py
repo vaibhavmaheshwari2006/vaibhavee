@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 from collections import Counter
+import textwrap
 
 # Import core modules
 import fingerprint as fp
@@ -34,7 +35,7 @@ def configure_matplotlib_theme():
 configure_matplotlib_theme()
 
 # Custom Styling (CSS)
-st.markdown("""
+st.html("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap');
 
@@ -230,7 +231,7 @@ st.markdown("""
         line-height: 1.45;
     }
 </style>
-""", unsafe_allow_html=True)
+""")
 
 # Helper function to generate pairing coordinates for plots
 def generate_pair_coordinates(peaks, fan_value=15, min_delta_t=1, max_delta_t=100):
@@ -259,7 +260,7 @@ DEFAULT_DATA_DIR = r"C:\Users\Asus\OneDrive\Desktop\Project Sound detection\song
 db.init_db(DB_PATH)
 
 # Sidebar - Database Control
-st.sidebar.markdown('<div class="sidebar-title">Database Control</div>', unsafe_allow_html=True)
+st.sidebar.html('<div class="sidebar-title">Database Control</div>')
 st.sidebar.write("Configure and index your reference song catalog.")
 
 # Directory Input
@@ -298,7 +299,7 @@ if st.sidebar.button("📂 Scan & Index Audio Folder"):
         st.balloons()
 
 # Main Layout Header
-st.markdown('<div class="main-title">🎵 Audio Recognition System</div>', unsafe_allow_html=True)
+st.html('<div class="main-title">🎵 Audio Recognition System</div>')
 
 # Select mode
 mode = st.radio("Select Application Mode", ["Single-Clip Mode", "Batch Mode"], horizontal=True)
@@ -372,29 +373,29 @@ if mode == "Single-Clip Mode":
                 pass
                 
             if not scores:
-                st.markdown("""
+                st.html("""
                 <div class="success-card" style="border-color: #ff9800; background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.05) 100%);">
                     <div class="success-title" style="color: #ff9800;">No Matches Found</div>
                     <div class="success-song" style="font-size: 1.8rem;">Could not identify song</div>
                     <p style="color: #aaaaaa; margin-top: 10px;">Ensure the database is indexed with songs.</p>
                 </div>
-                """, unsafe_allow_html=True)
+                """)
             else:
                 best_song_id, peak_score, total_matches, best_offset = scores[0]
                 best_song_title = song_names.get(best_song_id, f"Unknown Song (ID: {best_song_id})")
                 
                 # Check confidence threshold
                 if peak_score < 20:
-                    st.markdown(f"""
+                    st.html(f"""
                     <div class="success-card" style="border-color: #ff9800; background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.05) 100%);">
                         <div class="success-title" style="color: #ff9800;">Song Not in Dataset</div>
                         <div class="success-song" style="font-size: 2.2rem;">Confidence too low</div>
                         <p style="color: #aaaaaa; margin-top: 10px;">The closest candidate was <b>{best_song_title}</b> with a score of <b>{peak_score}</b> (threshold: 20). This indicates the query track is likely not in the database.</p>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
                 else:
                     # Show a beautiful recognition card
-                    st.markdown(f"""
+                    st.html(f"""
                     <div class="success-card">
                         <div class="success-title">Recognized Song</div>
                         <div class="success-song">{best_song_title}</div>
@@ -413,7 +414,7 @@ if mode == "Single-Clip Mode":
                             </div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
                 
                 # Render Visualization Tabs
                 tab_visuals, tab_leaderboard = st.tabs([
@@ -495,7 +496,7 @@ if mode == "Single-Clip Mode":
                     st.table(pd.DataFrame(leaderboard_data))
     else:
         # Home screen instructions
-        st.markdown("""
+        st.html("""
         <div class="landing-container">
             <div class="landing-header">
                 <h2 style="margin: 0; font-weight: 800; font-size: 2.2rem; color: #ffffff;">🎵 Audio Recognition Dashboard</h2>
@@ -520,7 +521,7 @@ if mode == "Single-Clip Mode":
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
 
 else:
     st.write("Upload a folder/set of query audio files to predict all tracks in batch mode and export a `results.csv` file.")

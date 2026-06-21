@@ -19,18 +19,15 @@ def init_db(db_path="fingerprints.db"):
     )
     """)
     
-    # Create fingerprints table
+    # Create fingerprints table (WITHOUT ROWID with compound primary key for minimal size)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS fingerprints (
-        hash TEXT NOT NULL,
+        hash INTEGER NOT NULL,
         song_id INTEGER NOT NULL,
         offset INTEGER NOT NULL,
-        FOREIGN KEY (song_id) REFERENCES songs (id) ON DELETE CASCADE
-    )
+        PRIMARY KEY (hash, song_id, offset)
+    ) WITHOUT ROWID
     """)
-    
-    # Create index on hash for O(1) matching speed
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_hash ON fingerprints(hash)")
     
     conn.commit()
     conn.close()
@@ -68,8 +65,8 @@ def store_song_fingerprints(db_path, song_title, fingerprints):
         cursor.execute("DELETE FROM fingerprints WHERE song_id = ?", (song_id,))
         
     # Bulk insert fingerprints
-    data_to_insert = [(h, song_id, int(offset)) for h, offset in fingerprints]
-    cursor.executemany("INSERT INTO fingerprints (hash, song_id, offset) VALUES (?, ?, ?)", data_to_insert)
+    data_to_insert = [(int(h), song_id, int(offset)) for h, offset in fingerprints]
+    cursor.executemany("INSERT OR IGNORE INTO fingerprints (hash, song_id, offset) VALUES (?, ?, ?)", data_to_insert)
     
     conn.commit()
     conn.close()
@@ -93,8 +90,8 @@ def match_fingerprints(db_path, query_fingerprints):
     
     # Group query offsets by hash
     query_by_hash = defaultdict(list)
-    for hash_str, t_query in query_fingerprints:
-        query_by_hash[hash_str].append(t_query)
+    for hash_val, t_query in query_fingerprints:
+        query_by_hash[int(hash_val)].append(int(t_query))
         
     hashes = list(query_by_hash.keys())
     matches = defaultdict(list)
