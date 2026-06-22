@@ -253,11 +253,14 @@ def generate_pair_coordinates(peaks, fan_value=15, min_delta_t=1, max_delta_t=10
     return pairs
 
 # DB Path and Default folder
-DB_PATH = "fingerprints.db"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "fingerprints.db")
 DEFAULT_DATA_DIR = r"C:\Users\Asus\OneDrive\Desktop\Project Sound detection\songs"
 
-# Init DB on load
-db.init_db(DB_PATH)
+# Init DB on load if it doesn't exist
+if not os.path.exists(DB_PATH):
+    db.init_db(DB_PATH)
+
 
 # Sidebar - Database Control
 st.sidebar.html('<div class="sidebar-title">Database Control</div>')

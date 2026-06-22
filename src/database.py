@@ -2,35 +2,48 @@ import sqlite3
 from collections import defaultdict, Counter
 
 def get_connection(db_path="fingerprints.db"):
-    return sqlite3.connect(db_path)
+    try:
+        # Try opening in read-write mode (default)
+        return sqlite3.connect(db_path)
+    except sqlite3.OperationalError:
+        # Fallback to read-only mode using a URI
+        try:
+            return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        except Exception:
+            # Fallback to default to raise the original exception
+            return sqlite3.connect(db_path)
 
 def init_db(db_path="fingerprints.db"):
     """
     Initialize SQLite database tables and indices.
     """
-    conn = get_connection(db_path)
-    cursor = conn.cursor()
-    
-    # Create songs table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS songs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT UNIQUE NOT NULL
-    )
-    """)
-    
-    # Create fingerprints table (WITHOUT ROWID with compound primary key for minimal size)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS fingerprints (
-        hash INTEGER NOT NULL,
-        song_id INTEGER NOT NULL,
-        offset INTEGER NOT NULL,
-        PRIMARY KEY (hash, song_id, offset)
-    ) WITHOUT ROWID
-    """)
-    
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        
+        # Create songs table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS songs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT UNIQUE NOT NULL
+        )
+        """)
+        
+        # Create fingerprints table (WITHOUT ROWID with compound primary key for minimal size)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fingerprints (
+            hash INTEGER NOT NULL,
+            song_id INTEGER NOT NULL,
+            offset INTEGER NOT NULL,
+            PRIMARY KEY (hash, song_id, offset)
+        ) WITHOUT ROWID
+        """)
+        
+        conn.commit()
+        conn.close()
+    except sqlite3.OperationalError as e:
+        print(f"Warning: Could not initialize database (it may be read-only): {e}")
+
 
 def clear_db(db_path="fingerprints.db"):
     """
