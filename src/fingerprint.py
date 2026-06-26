@@ -82,7 +82,7 @@ def generate_fingerprints(peaks, fan_value=15, min_delta_t=1, max_delta_t=100):
                 break
                 
             if delta_t >= min_delta_t:
-                # Pack to 32-bit integer: f1 (bits 19-29), f2 (bits 8-18), delta_t (bits 0-7)
+                # Pack to 32-bit integer: f1 (bits 19-31, up to 13 bits), f2 (bits 8-18, 11 bits), delta_t (bits 0-7, 8 bits)
                 hash_val = int((f1 << 19) | (f2 << 8) | delta_t)
                 fingerprints.append((hash_val, int(t1)))
                 targets_paired += 1

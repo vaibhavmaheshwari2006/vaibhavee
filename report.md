@@ -1,6 +1,6 @@
 # Audio Song Recognition System Report
 
-**Submission for Q3 (A) and Q3 (B)**
+**Submission by Vaibhav Maheshwari (Partner 1) & Ayush Tiwari (Partner 2)**
 
 ---
 
@@ -9,105 +9,84 @@
 * **Live Deployed Application**: [Streamlit Live App (vaibhavee-ce9vxad7wwjyai9dysesny.streamlit.app)](https://vaibhavee-ce9vxad7wwjyai9dysesny.streamlit.app/)
 * **Source Code Repository**: [GitHub Repository (github.com/vaibhavmaheshwari2006/vaibhavee)](https://github.com/vaibhavmaheshwari2006/vaibhavee)
 
-> [!NOTE]
-> The indexed reference song database (`fingerprints.db` containing 50 songs and 2.6M fingerprints) is packed directly with the deployed application code, making it instantly functional on Streamlit Community Cloud.
-
 ---
 
-## Q3 (A) System Overview & Core Algorithm
+## Q3 (A) Sonic Signatures
 
-The application implements a landmark-based audio fingerprinting and retrieval system, modeled after the **Shazam algorithm** (Avery Li-Chun Wang, 2003). The core objective is to identify a short, potentially noisy query audio clip from a large database of reference songs in a translation-invariant manner.
+This section addresses each of the specific questions posed in the course project guidelines for Q3 (A) (Sonic Signatures). The answers are backed by theoretical derivations and quantitative experimental data collected during testing.
 
-The workflow consists of four main phases:
+### Question 1: Limitation of Single Fourier Transform (DFT/DTFT)
+**Question:** *First, see why a single Fourier transform will not do. Plot the DFT magnitude of an entire song: you can read off which frequencies it contains, but not when they were played, all sense of timing is gone.*
 
-```mermaid
-graph TD
-    A[Raw Audio Input] --> B[Downsampling & STFT]
-    B --> C[Constellation Map (2D Peak Detection)]
-    C --> D[Combinatorial Hashing]
-    D --> E[SQLite Database Query]
-    E --> F[Offset Alignment Histogram (Voting)]
-    F --> G[Matched Song Identification]
-```
+**Answer:**
+A single Discrete Fourier Transform (DFT) or Discrete-Time Fourier Transform (DTFT) is calculated by integrating the input signal $x[n]$ over its entire duration:
+$$X(f) = \sum_{n=0}^{N-1} x[n] e^{-j \frac{2\pi}{N} f n}$$
+This integration sums all temporal details, converting the time-domain signal into a static frequency spectrum. While it reveals *which* frequency components are present in the song in total, it loses all information about *when* those frequencies were played. For a song, which is a highly non-stationary signal with notes changing sequentially, a single DFT smears all notes together, destroying the temporal structure necessary for recognition.
 
-1. **Spectrogram Generation**: Audio is loaded, downsampled to **11025 Hz** (mono), and converted into a time-frequency representation via **Short-Time Fourier Transform (STFT)**.
-2. **Constellation Map**: Local maxima peaks are extracted from the spectrogram using a 2D maximum filter. This sparse representation keeps only the most prominent coordinates, making it resilient to noise and amplitude fluctuations.
-3. **Combinatorial Hashing**: To achieve translation-invariance (recognizing a song regardless of the start position of the clip), peaks are paired with nearby target peaks to create hashes. Each fingerprint contains a hash and its source time offset.
-4. **Offset Alignment (Voting)**: The matching engine queries the database for all occurrences of the query hashes. For each match, it calculates the time difference:
-   $$\Delta \tau = t_{db} - t_{query}$$
-   A genuine match will show a sharp peak in the histogram of offset differences because all query hashes will align at the exact same offset relative to the original song.
+To demonstrate this, the DFT magnitude of the entire baseline song (`Back In The U.S.S.R.`) was computed and plotted in Figure 1. While we can identify prominent frequency ranges, we cannot tell the order of the musical notes. In contrast, the Short-Time Fourier Transform (STFT) spectrogram shown in Figure 2 preserves timing by sliding a short temporal window and calculating the Fourier transform for successive slices, mapping the sound's evolution over time.
 
----
+#### Figure 1: DFT Magnitude of Entire Song (No Time Information)
+![Entire Song DFT Magnitude](temp_plots/dft_entire_song.png)
 
-### Embedded Pipeline Visualizations (Querying `test.mp3`)
-
-#### 1. Short-Time Fourier Transform (STFT) Spectrogram
-The spectrogram visualizes sound frequency (y-axis) over time (x-axis), with brightness representing loudness (dB).
+#### Figure 2: STFT Spectrogram (Time-Frequency Representation)
 ![Spectrogram](temp_plots/spectrogram.png)
 
-#### 2. Constellation Map (Sparse Peaks)
-Detected local maximum peaks. This 'constellation map' forms a robust, noise-tolerant summary of the song's audio content.
-![Constellation Map](temp_plots/constellation.png)
 
-#### 3. Offset Alignment Histogram
-A sharp, prominent peak indicates that many hashes from the query matched the song at the exact same relative time difference, proving a genuine match.
-![Offset Alignment Histogram](temp_plots/histogram.png)
+### Question 2: STFT Window Length Resolution Trade-off
+**Question:** *Now experiment a little: redo it with a short window and with a long one, and describe what you observe about the resolution in time versus in frequency.*
 
----
+**Answer:**
+The time-frequency resolution is governed by the **Heisenberg Gabor Uncertainty Principle**, which states that we cannot simultaneously resolve frequency and time with infinite precision. The product of time resolution ($\Delta t$) and frequency resolution ($\Delta f$) is bounded by a constant:
+$$\Delta t \cdot \Delta f \ge \frac{1}{4\pi}$$
+By changing the STFT window size ($N_{\text{fft}}$), we change this trade-off:
+* **Short Window ($N_{\text{fft}} = 512$):** Spans a short time window ($46.4$ ms at $11025$ Hz). It offers excellent temporal resolution, meaning sudden transients (such as drum beats or note onsets) show up as sharp, distinct vertical lines. However, the frequency resolution is coarse ($\Delta f \approx 21.5$ Hz), meaning nearby frequency bins smear together.
+* **Long Window ($N_{\text{fft}} = 2048$):** Spans a larger time window ($185.8$ ms). It offers excellent frequency resolution ($\Delta f \approx 5.4$ Hz), revealing individual musical harmonics as thin, sharp horizontal lines. However, the time resolution is coarse, smearing quick temporal events.
 
-## Q3 (A) Database Design & Optimizations
+For song recognition, the timing offset of landmarks is critical. The short window size ($N_{\text{fft}} = 512$) is preferred because its finer time resolution allows peak coordinates to align precisely in a single bin of the offset histogram during matching, maximizing retrieval accuracy.
 
-The storage and retrieval engine has been optimized to handle millions of fingerprints with minimal storage overhead and sub-second lookup times.
+#### Figure 3: STFT Window Size Comparison
+| Short Window ($N_{\text{fft}} = 512$) | Long Window ($N_{\text{fft}} = 2048$) |
+| :---: | :---: |
+| ![Window 512](temp_plots/exp1_window_512.png) | ![Window 2048](temp_plots/exp1_window_2048.png) |
 
-### SQLite Schema
 
-The database `fingerprints.db` is structured with two tables:
+### Question 3: Single Peaks vs. Paired Hashes (Combinatorial Hashing)
+**Question:** *Then repeat the matching using single peaks on their own instead of pairs, and compare what you get, explain why joining two peaks into a single fingerprint makes a correct match so much more decisive.*
 
-1. **`songs`**:
-   - `id`: INTEGER PRIMARY KEY AUTOINCREMENT (unique song identifier)
-   - `title`: TEXT UNIQUE NOT NULL (the clean name of the track)
+**Answer:**
+Using individual, unassociated peaks (constellation landmarks) leads to several matching failures:
+1. **Lack of Translation Invariance:** A single peak is represented by absolute coordinates $(t_1, f_1)$. When a query clip is recorded starting at a random offset $T_{\text{start}}$, all absolute time coordinates shift to $t_1' = t_1 + T_{\text{start}}$. Consequently, the absolute time coordinate cannot be matched directly in the database.
+2. **High Collision Probability (Low Entropy):** If we search based only on frequency values $f_1$ to avoid the time-shift issue, the search space is limited to $N_{\text{fft}}/2 = 256$ bins. In a database with millions of landmarks, thousands of peaks share the exact same frequency, causing huge numbers of false matches.
 
-2. **`fingerprints`**:
-   - `hash`: INTEGER NOT NULL (packed 32-bit hash value)
-   - `song_id`: INTEGER NOT NULL (foreign key referencing `songs.id`)
-   - `offset`: INTEGER NOT NULL (time frame offset of the anchor peak)
+**Combinatorial Hashing** solves this by pairing an anchor peak $(t_1, f_1)$ with a target peak $(t_2, f_2)$ inside a target zone. This creates a link represented by:
+$$\text{Fingerprint} = (f_1, f_2, \Delta t) \quad \text{where} \quad \Delta t = t_2 - t_1$$
+Additionally, packing $f_1$ (up to 13 bits), $f_2$ (11 bits), and $\Delta t$ (8 bits) into a 32-bit integer creates a massive search space ($2^{32} \approx 4.29 \times 10^9$ possible hash values). Specifically, our implementation utilizes a 32-bit bit-packed integer schema where $f_1$ is shifted by 19 bits (occupying bits 19-31, providing up to 13 bits of precision), $f_2$ is shifted by 8 bits (occupying bits 8-18, providing 11 bits of precision), and $\Delta t$ occupies the lowest 8 bits (bits 0-7). Even though the frequency bins for $N_{\text{fft}} = 512$ only require 8 bits, this generic schema supports larger window sizes while fitting compactly within a standard 32-bit SQLite integer. This drastically reduces database collisions, ensuring that lookups return highly precise matches. 
 
-### Space-Saving Optimizations
+Figure 4 illustrates this concept.
 
-* **32-Bit Bit-Packing**: Instead of storing the hash as a string (e.g. `"f1:f2:delta_t"`), the three components are packed into a single 32-bit integer:
-  - $f_1$ (frequency bin of anchor peak): Bits 19–29 (11 bits, covers indices 0–2048)
-  - $f_2$ (frequency bin of target peak): Bits 8–18 (11 bits, covers indices 0–2048)
-  - $\Delta t$ (time difference): Bits 0–7 (8 bits, covers time spans 0–255 frames)
+**Experimental Methodology for Single-Peak Matching:**
+To evaluate single-peak matching empirically, a frequency-matching lookup system was implemented. Instead of generating paired hashes, each peak is represented solely by its absolute frequency bin $f_{\text{query}}$ (acting as the search key), completely discarding the temporal relation to neighboring peaks. The database indexing stores each catalog peak by its frequency bin $f_{\text{db}} \to t_{\text{db}}$. During matching, for every peak in the query, we query the database for all peaks sharing the same frequency bin ($f_{\text{query}} == f_{\text{db}}$) and compute the time offset difference:
+$$\Delta \tau = t_{\text{db}} - t_{\text{query}}$$
+An offset voting histogram is then constructed by aggregating all calculated $\Delta \tau$ values across all matched peaks. Since there are only $N_{\text{fft}}/2 = 256$ frequency bins, thousands of unrelated peaks share the same frequency, producing an enormous number of random collisions at all offsets.
 
-  $$\text{Hash Integer} = (f_1 \ll 19) \mid (f_2 \ll 8) \mid \Delta t$$
+Figure 5 shows the empirical matching results: matching with single peaks on their own results in high collision probability (producing a flat, uniform background noise with no clear offset alignment peak), whereas matching with combinatorial paired hashes generates a sharp, decisive voting peak at the true alignment offset.
 
-* **`WITHOUT ROWID` Compound Primary Key**: By declaring the primary key as `PRIMARY KEY (hash, song_id, offset)` and appending `WITHOUT ROWID`, SQLite stores the data directly in the B-Tree index structure. This eliminates the standard 64-bit integer row identifier (rowid) per entry and avoids duplicate index storage, saving **~8 bytes per record** and speeding up retrieval.
+#### Figure 4: Hashing Pairing Comparison
+| Constellation Map (Single peaks) | Combinatorial Pairing Links |
+| :---: | :---: |
+| ![Single Peaks](temp_plots/exp2_constellation.png) | ![Paired Peaks](temp_plots/exp2_paired.png) |
 
----
+#### Figure 5: Offset Alignment Histogram Comparison
+| Single Peaks Matching (No Peak / Flat Background Noise) | Paired Hashes Matching (Sharp Decisive Alignment Peak) |
+| :---: | :---: |
+| ![Single Peaks matching](temp_plots/histogram_single.png) | ![Paired Hashes matching](temp_plots/histogram.png) |
 
-## Q3 (A) Database Statistics
 
-Below are the exact metrics computed from the active fingerprint database:
+### Question 4: Robustness to Noise
+**Question:** *Now see how robust your identifier is. Add increasing amounts of noise to a query and find how far you can push it before recognition fails.*
 
-| Metric | Value | Notes |
-| :--- | :--- | :--- |
-| **Total Indexed Songs** | 50 | Catalog of Beatles, Queen, and popular tracks |
-| **Total Fingerprint Records** | 2,606,370 | Total entries in the SQLite fingerprints table |
-| **Average Fingerprints / Song** | 52,127.4 | Density of landmarks per song |
-| **Average Song Duration** | 196.25 seconds | Based on sample track metadata (~3.27 mins) |
-| **Average Fingerprints / Second** | ~265.6 | Landmarks generated per second of audio |
-| **Database File Size** | 34.44 MB | Minimal physical footprint on disk |
-| **Average Space / Fingerprint** | ~13.85 bytes | Extremely compact (includes indices and table overhead) |
-
----
-
-## Q3 (A) Performance & Robustness Benchmarks
-
-To evaluate the system's resilience under degraded audio conditions, a comprehensive test suite was executed against query clip `test.mp3` matching **"Back In The U.S.S.R."** under various artificial deformations.
-
-### Robustness Test Results
-
-The system uses a **Confidence Score (Peak Alignment Height)** threshold of **20** to confirm a match.
+**Answer:**
+To test noise robustness, white Gaussian noise was added to the query clip at increasing noise levels. The prediction score (the height of the tallest offset alignment peak) is recorded in Table 1.
 
 | Deformation Type | Details / Parameter | Peak score | Total Matching Hashes | Result / Prediction | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -129,19 +108,130 @@ The system uses a **Confidence Score (Peak Alignment Height)** threshold of **20
 | **Time Stretch** | 1.10 Rate | **158** | 7,864 | Back In The U.S.S.R. | **SUCCESS** |
 | **Time Stretch** | 1.20 Rate (Slow) | **52** | 6,553 | Back In The U.S.S.R. | **SUCCESS** |
 
-### Robustness Analysis
+As shown in Figure 6, adding noise raises the spectrogram floor. However, because the 2D local maximum filter looks for points that are larger than their neighbors, the locations of the most dominant spectral peaks remain unchanged. 
+Even under high noise levels (such as $0.05$), the system identifies the song with a peak score of **$2680$**, which is far above the validation threshold of **$20$**. The system can be pushed even higher (to noise levels of approximately $0.08$ to $0.10$) before the local peaks are completely masked and the recognition fails.
 
-1. **Acoustic Noise Resilience (High)**:
-   - Additive white noise has minimal impact on recognition rates, with the query easily recognized even at a noise level of `0.050` (Peak Score of `2680`, well above the threshold of `20`). This is because the 2D local maximum filter identifies structural spectral landmarks that remain dominant even when background noise levels increase.
-2. **Pitch Shift Sensitivity (High)**:
-   - Shifting pitch by as little as `0.5` semitones completely breaks matching. Pitch shifting scales frequency content, moving the spectrogram coordinates vertically. Because the hash values depend on absolute frequency bin integers ($f_1$ and $f_2$), even minor shifts yield entirely different hash keys, preventing database matches.
-3. **Time Stretch Tolerance (Moderate)**:
-   - The system is moderately tolerant to time stretching (between `0.90` and `1.20` rates). While stretching audio changes the time-offset difference between paired peaks ($\Delta t$), short target pairings and rounding bounds allow a subset of hashes to remain identical. Further, the voting histogram peak remains localized enough to exceed the confidence threshold.
+#### Figure 6: Spectrogram Noise Levels
+| Clean (Original) | Noise Level = 0.01 | Noise Level = 0.05 |
+| :---: | :---: | :---: |
+| ![Noise 0](temp_plots/exp3_noise_0.png) | ![Noise 01](temp_plots/exp3_noise_01.png) | ![Noise 05](temp_plots/exp3_noise_05.png) |
+
+
+### Question 5: Pitch Shift and Time Stretch Sensitivity
+**Question:** *Then shift the whole clip up in pitch by a little (or stretch it slightly in time) and try again. Describe what you see in each case and explain why; in particular, why a small pitch shift can defeat the identifier even though the song still sounds the same to you.*
+
+**Answer:**
+* **Pitch Shift Sensitivity (High Failure Rate):** As shown in Table 1, shifting the pitch by as little as $\pm 0.5$ semitones completely defeats the identifier (peak scores drop to $6$ and $7$). 
+  
+  This occurs because pitch shifting shifts the frequency components of the signal vertically on a linear frequency axis (Figure 7). Since the 32-bit hashes are created using exact integer frequency bin numbers ($f_1$ and $f_2$), shifting these values by even 1 or 2 bins changes the generated hashes completely. As a result, the query hashes do not match the database hashes at all, causing retrieval to fail. To a human, a 0.5 semitone change is barely noticeable because human perception is relative and log-frequency based, but to the exact matching digital hash search, it is a mismatch.
+  
+* **Time Stretch Sensitivity (Moderate Tolerance):** Under time stretching (between $0.90\times$ and $1.20\times$), the playback speed changes while the pitch remains constant. This stretches or compresses the spectrogram horizontally (Figure 8). 
+  
+  This scaling changes the time gap $\Delta t = t_2 - t_1$ between peak pairs, altering some hash values. It also causes the matching offsets $\Delta \tau = t_{\text{db}} - t_{\text{query}}$ to drift as the clip plays. However, for a short query clip, the drift is slow enough that many hashes still align within a narrow offset region, allowing the tallest peak to exceed the validation threshold of $20$ (e.g. score of $316$ at $1.05\times$ stretch). Extreme stretching (such as $0.80\times$) destroys this alignment, leading to failure.
+
+#### Figure 7: Pitch Shift Spectrograms
+| Clean (Original) | Pitch Shift = +1.0 Semitone | Pitch Shift = -1.0 Semitone |
+| :---: | :---: | :---: |
+| ![Pitch 0](temp_plots/exp4_pitch_0.png) | ![Pitch Plus](temp_plots/exp4_pitch_plus.png) | ![Pitch Minus](temp_plots/exp4_pitch_minus.png) |
+
+#### Figure 8: Time Stretch Spectrograms
+| Clean (Original) | Stretch Rate = 0.9 (Slower) | Stretch Rate = 1.1 (Faster) |
+| :---: | :---: | :---: |
+| ![Stretch 0](temp_plots/exp5_stretch_0.png) | ![Stretch 09](temp_plots/exp5_stretch_09.png) | ![Stretch 11](temp_plots/exp5_stretch_11.png) |
+
+
+### Question 6: Suggested Improvement for Robustness
+**Question:** *Suggest one change that would make the system more robust.*
+
+**Answer:**
+To make the system robust to pitch shifts, we can replace the linear Short-Time Fourier Transform (STFT) with a **Constant-Q Transform (CQT)** or apply a **Logarithmic Frequency Scale**. 
+
+On a logarithmic scale, pitch shifts correspond to a constant vertical translation rather than a scaling factor. By hashing the differences between adjacent peak frequencies ($\Delta f = \log(f_2) - \log(f_1)$) rather than storing their absolute bin numbers, the frequency components of the fingerprint become invariant to pitch shifting. Shifting the pitch of the song by any number of semitones changes the absolute frequencies, but the logarithmic difference $\Delta f$ remains identical, allowing the database hashes to match.
 
 ---
 
-## Architectural Comparison: Prototype vs. Modernized System
+## Signals to Softwares - App Architecture & Deliverables
 
+This section details the implementation of the interactive software prototype and lists the project deliverables submitted for evaluation.
+
+### Interactive Streamlit Web Dashboard
+The application is wrapped in an interactive Streamlit web dashboard. Crucially, **the database ships pre-indexed and fully pre-packaged with the deployed application**. The grader does NOT need to perform any manual indexing or folder scanning to test the system. The specific components of the dashboard are:
+1. **Pre-Indexed SQLite Database (Plug-and-Play):** The application comes bundled with `fingerprints.db`, which contains all 50 reference catalog tracks fully indexed (9,539,086 fingerprints). This ensures the app is instantly functional upon startup.
+2. **Administrative Database Control Center (Optional Utility):** While the 50 tracks are already pre-loaded, a control sidebar is provided as a developer utility. It allows selecting an audio directory to scan, downsample, and index new files into the database. However, this is entirely optional, as the pre-indexed database is already active and populated by default.
+3. **Single-Clip Identification Mode:** Accepts audio uploads. It features interactive sliders to adjust noise levels, pitch shift, and time stretch, and displays:
+   - The computed decibel spectrogram.
+   - The constellation peak map.
+   - The offset alignment voting histogram indicating the matched song candidate.
+4. **Batch Process Mode:** Accepts multiple audio files, performs matching in parallel, and exports a downloadable `results.csv` containing the matching song predictions.
+
+![Single-Clip Mode](temp_plots/single_mode.png)
+
+![Batch Mode](temp_plots/batch_mode.png)
+
+### Batch Export Format & Verification
+As specified in the submission guidelines, the batch mode accepts a set of uploaded query clips, runs landmark matching on them, and exports a CSV file named `results.csv`. The file is formatted with exactly two columns: `filename` and `prediction`, where the prediction column contains the predicted song's file base name without extension (matching the song catalog).
+
+**Batch Prediction & CSV Export Code Block:**
+```python
+# Batch execution loop from src/app.py
+results = []
+for idx, uploaded_file in enumerate(uploaded_files):
+    # Load audio, extract peaks, and match fingerprints
+    y, sr = fp.load_audio(temp_path)
+    spec, freqs, times = fp.compute_spectrogram(y, sr)
+    peaks = fp.find_peaks(spec)
+    fingerprints = fp.generate_fingerprints(peaks)
+    matches, song_names = db.match_fingerprints(DB_PATH, fingerprints)
+    scores = db.score_matches(matches)
+    
+    if not scores:
+        prediction = ""  # No matches
+    else:
+        best_song_id, peak_score, _, _ = scores[0]
+        if peak_score < 20:
+            prediction = ""  # Confidence below threshold
+        else:
+            # prediction = song's filename without extension
+            prediction = song_names.get(best_song_id, "")
+            
+    results.append({
+        "filename": uploaded_file.name,
+        "prediction": prediction
+    })
+
+# Write directly to disk as results.csv
+df = pd.DataFrame(results)
+df.to_csv("results.csv", index=False)
+```
+
+#### Sample `results.csv` Output Structure
+| filename | prediction |
+| :--- | :--- |
+| query_clip_1.wav | Back In The U.S.S.R. |
+| query_clip_2.mp3 | Bohemian Rhapsody |
+| query_clip_3.m4a | Yesterday |
+
+### Database Design & Bit-Packing Schema
+The SQLite database stores the reference indexes using optimizations to handle large volumes of landmarks:
+* **Bit-Packing:** Hashes are packed into a single 32-bit integer:
+  $$\text{Hash Integer} = (f_1 \ll 19) \mid (f_2 \ll 8) \mid (t_2 - t_1)$$
+  where $\Delta t = t_2 - t_1$ occupies the lowest 8 bits (bits 0-7), the frequency bin $f_2$ occupies 11 bits (bits 8-18), and the frequency bin $f_1$ occupies the remaining 13 bits (bits 19-31).
+* **Indexing Optimization:** Declared with a compound primary key `PRIMARY KEY (hash, song_id, offset)` and `WITHOUT ROWID`. This stores data directly in the SQLite B-Tree index, eliminating extra record ID overhead and speeding up queries.
+
+
+
+### Submission Deliverables Summary
+As required by the submission guidelines, the following deliverables are submitted:
+1. **PDF Report:** Containing the application architecture design, code implementation details, and interface screenshots.
+2. **Live Deployed Web Application Link:** Hosted live on Streamlit Community Cloud.
+3. **Source Code Link:** Publicly accessible GitHub repository containing the complete implementation.
+4. **Source Code Zip File:** A structured zip archive containing:
+   - `src/app.py` (User interface)
+   - `src/fingerprint.py` (Audio processing engine)
+   - `src/database.py` (SQLite database manager)
+   - `src/generate_experiment_plots.py` & `src/generate_dft_plot.py` (Plot generators)
+
+### Architectural Comparison Summary
 Below is a comparative review of the differences between the prototype and the modernized application:
 
 | Feature / Param | Prototype (`Project Sound detection`) | Modernized Application (`vaibhavmaheshwariee`) |
